@@ -14,3 +14,8 @@
 Route::get('/', function () {
     return view('welcome');
 });
+
+/**
+ * 查找电脑历史图片归类整理模块
+ */
+Route::get('/keyimg/keyimg/findimg', 'KeyImg\KeyImgController@findImg');
