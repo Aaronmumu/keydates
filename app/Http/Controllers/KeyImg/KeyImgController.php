@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\KeyImg;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
-
+use App\Services\File\FileService;
+use Mockery\Exception;
 
 class KeyImgController extends Controller
 {
@@ -35,18 +37,69 @@ class KeyImgController extends Controller
      * 展示图片
      * @return \Illuminate\Contracts\View\Factory|\Illuminate\View\View
      */
-    public function findImg()
+    public function findImg(Request $request)
     {
+        $allFile = FileService::getAll();
+        $fileNameAll = array_column($allFile, 'file_name');
+
         $data = Cache::get('dataImg', []);
         $name = '缓存';
         $json = '';
-        if (empty($data)) {
+        if (empty($datoa)) {
             $files = Storage::disk('public')->allFiles('/');
             $data = [];
             foreach ($files as $file) {
+                $insertData = [
+                    'file_info' => 0,
+                    'file_note' => 0,
+                ];
+
+                $fileUrl = asset('storage/' . basename($file));
+                $fileMd5 = md5_file($fileUrl);
+                try {
+                    $fileInfo = getimagesize($fileUrl);
+                } catch (Exception $e) {
+                    continue;
+                }
+
+                $insertData['file_path'] = $fileUrl;
+                $insertData['file_name'] = basename($file);
+                $insertData['file_md5'] = $fileMd5;
+                if ($fileInfo === false) {
+                    continue;
+                }
+                $insertData['width'] = $fileInfo[0];
+                $insertData['height'] = $fileInfo[1];
+                $insertData['file_type'] = $fileInfo['mime'];
+
                 if (strpos($file, '.jpg') !== false) {
                     $imgExif = $this->get_img_info(asset('storage/' . basename($file)));
-                    if (empty($imgExif)) {continue;}
+
+                    $insertData['add_time'] = date('Y-m-d');
+
+                    $fileInfo = [
+                        'imgExif' => $imgExif,
+                        'getimagesize' => $fileInfo,
+                    ];
+
+                    if (empty($imgExif)) {
+                        $insertData['file_info'] = json_encode($fileInfo);
+                        //插入
+                        FileService::add($insertData);
+                        continue;
+                    }
+
+                    $insertData['latitude'] = $imgExif['latitude'];
+                    $insertData['longitude'] = $imgExif['longitude'];
+                    $insertData['address'] = $imgExif['address'];
+                    $insertData['province'] = $imgExif['province'];
+                    $insertData['city'] = $imgExif['city'];
+                    $insertData['district'] = $imgExif['district'];
+                    $insertData['township'] = $imgExif['township'];
+                    $insertData['senic_spot'] = $imgExif['senic_spot'];
+                    $insertData['build_time'] = $imgExif['img_time'];
+
+
                     $exif = $imgExif['exif'];
                     $width = empty($exif['COMPUTED']['Width']) ? 320 : $exif['COMPUTED']['Width'];
                     $height = empty($exif['COMPUTED']['Height']) ? 240 : $exif['COMPUTED']['Height'];
@@ -94,10 +147,14 @@ class KeyImgController extends Controller
                         $data[] = $info;
                     }
                 }
+                $insertData['file_info'] = json_encode($fileInfo);
+                //插入
+                FileService::add($insertData);
             }
             Cache::add('dataImg', $data, 100);
             $name = '非缓存';
         }
+        die('s');
         return view('keyimg/view', [
             'data' => $data,
             'name' => $name,
@@ -180,7 +237,6 @@ class KeyImgController extends Controller
                 icon: 'https://aos-cdn-image.amap.com/sns/ugc/photo/ddef3ad045b743dfa1464e83cefc35b7.jpg',
                 position: [$latitude, $longitude]
             },";
-
 
             $data = array(
                 'json' => $json,//图片拍摄时间
